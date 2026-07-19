@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RSVP Dashboard · Hasara & Shehara</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet" />
+<style>
+  :root{--bg:#faf6ee;--ink:#3a2f1f;--muted:#7a6a52;--gold:#b8892b;--grad:linear-gradient(135deg,#b8892b,#f6dfa2,#b9b3a4,#f6dfa2,#b8892b)}
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:var(--bg);color:var(--ink);font-family:'Montserrat',sans-serif}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:32px;margin:0 0 4px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:13px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:24px}
+  .card{background:#fffdf6;border-radius:14px;box-shadow:0 8px 30px rgba(120,90,20,.10),inset 0 0 0 1px rgba(184,137,43,.28);padding:20px;margin-bottom:20px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px}
+  .stat{padding:18px;border-radius:12px;background:linear-gradient(180deg,#fffdf6,#f4e9cf);box-shadow:inset 0 0 0 1px rgba(184,137,43,.28);text-align:center}
+  .stat .n{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .l{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:12px 10px;text-align:left;border-bottom:1px dashed rgba(184,137,43,.25);vertical-align:top}
+  th{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  tr:hover{background:rgba(184,137,43,.05)}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600}
+  .yes{background:#e5f4dc;color:#3d7a12}
+  .no{background:#f8dede;color:#9c2323}
+  input,button{font-family:inherit;font-size:14px;padding:10px 14px;border-radius:10px;border:1px solid rgba(184,137,43,.35);background:#fffdf6;color:var(--ink)}
+  button{cursor:pointer;background:var(--grad);color:#fff;border:none;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:10px 18px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .exp{margin-left:auto}
+  a.link{color:var(--gold);text-decoration:none;border-bottom:1px solid var(--gold)}
+  code{background:#f4e9cf;padding:2px 6px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RSVP Dashboard</h1>
+  <div class="sub">Hasara &amp; Shehara · Engagement · 20 Aug 2026</div>
+  <div class="card">
+    <div class="row">
+      <input id="url" placeholder="Google Apps Script Web App URL" style="flex:1;min-width:250px" />
+      <input id="key" placeholder="Admin key" type="password" />
+      <button id="load">Load RSVPs</button>
+      <button id="exp" class="exp">⬇ Export CSV</button>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+      Tip: the URL &amp; key are saved locally in this browser. Bookmark this page.
+    </div>
+  </div>
+  <div class="card">
+    <div class="stats" id="stats">
+      <div class="stat"><div class="n" id="sTotal">0</div><div class="l">Responses</div></div>
+      <div class="stat"><div class="n" id="sYes">0</div><div class="l">Attending</div></div>
+      <div class="stat"><div class="n" id="sNo">0</div><div class="l">Not Attending</div></div>
+      <div class="stat"><div class="n" id="sGuests">0</div><div class="l">Total Guests</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div id="tableWrap">
+      <div class="empty">Enter your endpoint URL &amp; admin key, then click <b>Load RSVPs</b>.</div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+$("url").value = localStorage.getItem("adm_url") || "";
+$("key").value = localStorage.getItem("adm_key") || "";
+let rows = [];
+$("load").addEventListener("click", async () => {
+  const url = $("url").value.trim();
+  const key = $("key").value.trim();
+  if (!url || !key) return alert("URL and admin key are required.");
+  localStorage.setItem("adm_url", url);
+  localStorage.setItem("adm_key", key);
+  $("tableWrap").innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const res = await fetch(url + (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key));
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error(data.error || "Bad response");
+    rows = data;
+    render();
+  } catch (e) {
+    $("tableWrap").innerHTML = '<div class="empty">Failed to load: ' + e.message + '</div>';
+  }
+});
+function render(){
+  const yes = rows.filter(r => (r.attending||"").toLowerCase() === "yes");
+  const no  = rows.filter(r => (r.attending||"").toLowerCase() === "no");
+  const guests = yes.reduce((a,r)=> a + (parseInt(r.guests)||1), 0);
+  $("sTotal").textContent = rows.length;
+  $("sYes").textContent = yes.length;
+  $("sNo").textContent = no.length;
+  $("sGuests").textContent = guests;
+  if (!rows.length){ $("tableWrap").innerHTML = '<div class="empty">No responses yet.</div>'; return; }
+  const html = `<table>
+    <thead><tr>
+      <th>#</th><th>Name</th><th>Phone</th><th>Attending</th><th>Guests</th><th>Side</th><th>Message</th><th>Time</th>
+    </tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr>
+      <td>${i+1}</td>
+      <td><b>${esc(r.name)}</b></td>
+      <td><a class="link" href="https://wa.me/${(r.phone||'').replace(/[^0-9]/g,'')}" target="_blank">${esc(r.phone)}</a></td>
+      <td><span class="badge ${(r.attending||'').toLowerCase()==='yes'?'yes':'no'}">${esc(r.attending)}</span></td>
+      <td>${esc(r.guests)}</td>
+      <td>${esc(r.side)}</td>
+      <td style="max-width:260px">${esc(r.message)}</td>
+      <td style="font-size:12px;color:#7a6a52">${fmt(r.timestamp)}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+  $("tableWrap").innerHTML = html;
+}
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmt(t){ if(!t) return ''; try{ return new Date(t).toLocaleString(); }catch{ return t; } }
+$("exp").addEventListener("click", () => {
+  if (!rows.length) return alert("Nothing to export.");
+  const cols = ["timestamp","name","phone","attending","guests","side","message"];
+  const csv = [cols.join(",")].concat(rows.map(r =>
+    cols.map(c => `"${String(r[c]||"").replace(/"/g,'""')}"`).join(",")
+  )).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rsvps.csv";
+  a.click();
+});
+</script>
+</body>
+</html>
